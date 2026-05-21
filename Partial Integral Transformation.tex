@@ -1,0 +1,59 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath, amssymb, array, booktabs}
+
+\title{Partial Integral Transformation for the Restricted CIS Hamiltonian}
+\author{Fubin Zhao}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+In the restricted configuration interaction singles (CIS) method, the Hamiltonian matrix elements require two-electron repulsion integrals (ERIs) of the form \((x u | t y)\) in Mulliken notation, where \(x, y\) denote particle orbitals (from the active particle subspace \(P\)) and \(t, u\) denote hole orbitals (from the active hole subspace \(H\)). To avoid the high cost of a full four-index transformation from atomic orbitals (AOs) to molecular orbitals (MOs), a \emph{partial integral transformation} is employed. This approach exploits the fact that only a subset of indices (hole and particle orbitals) is needed, and the transformation can be carried out stepwise, using permutational symmetry to reduce computational expense.
+
+\section{Partial Transformation Algorithm}
+
+We start from the AO ERI tensor \((\mu\nu|\lambda\sigma)\) (real, symmetric). The target integrals \((h_1 p_1 | h_2 p_2)\) are obtained by successively transforming one index at a time, keeping only the necessary intermediate quantities. The steps are outlined below, where \(m\) is the number of AOs, \(N_H\) the number of hole orbitals, and \(N_P\) the number of particle orbitals. The transformation matrix from AO to MO is denoted \(T_{\mu p}\) (for any MO index \(p\)).
+
+\subsection{Step 1: Transform the first index from AO to hole \(h_1\)}
+\[
+I^{(1)}_{h_1,\lambda,\nu\sigma} = (h_1\lambda|\nu\sigma) = \sum_{\mu=1}^{m} T_{\mu h_1}\, (\mu\lambda|\nu\sigma)
+\]
+Memory request: \(N_H \cdot m \cdot \frac{m(m+1)}{2}\) \\
+FLOPS: \(m \cdot N_H \cdot m \cdot \frac{m(m+1)}{2}\)
+
+\subsection{Step 2: Transform the second index from AO to particle \(p_1\)}
+\[
+I^{(2)}_{h_1,p_1,\nu\sigma} = (h_1 p_1|\nu\sigma) = \sum_{\lambda=1}^{m} T_{\lambda p_1}\, (h_1\lambda|\nu\sigma)
+\]
+Memory: \(N_H \cdot N_P \cdot \frac{m(m+1)}{2}\) \\
+FLOPS: \(m \cdot N_H \cdot N_P \cdot \frac{m(m+1)}{2}\)
+
+\subsection{Step 3: Transform the third index from AO to hole \(h_2\)}
+\[
+I^{(3)}_{h_1,p_1,h_2,\sigma} = (h_1 p_1|h_2\sigma) = \sum_{\nu=1}^{m} T_{\nu h_2}\, (h_1 p_1|\nu\sigma)
+\]
+Memory: \(N_H \cdot N_P \cdot N_H \cdot m\) \\
+FLOPS: \(m \cdot N_H \cdot N_P \cdot N_H \cdot m\)
+
+\subsection{Step 4: Transform the fourth index from AO to particle \(p_2\)}
+\[
+I^{(4)}_{h_1,p_1,h_2,p_2} = (h_1 p_1|h_2 p_2) = \sum_{\sigma=1}^{m} T_{\sigma p_2}\, (h_1 p_1|h_2\sigma)
+\]
+Memory: \(\frac{(N_H N_P)(N_H N_P+1)}{2}\) \\
+FLOPS: \(m \cdot \frac{(N_H N_P)(N_H N_P+1)}{2}\)
+
+\subsection{Remarks}
+The four-step procedure yields the required integrals \((h_1 p_1|h_2 p_2)\) where \(h_1, h_2\) are hole indices and \(p_1, p_2\) are particle indices. By exploiting permutational symmetry (e.g., \((h_1 p_1|h_2 p_2) = (h_2 p_2|h_1 p_1)\)), the total computational cost can be significantly reduced compared to a full transformation by pre-factor of time scale. The worst-case cost remains dominated by the number of active orbitals, i.e., \(\min(N_P, N_H) \cdot N_{\text{AO}}^4\).
+
+\section{Connection to the CIS Hamiltonian}
+
+Once the partial transformation is completed, the required two-electron contributions to the CIS Hamiltonian matrix elements, such as
+\[
+\langle ^1\Phi_t^x | \hat{H} | ^1\Phi_u^y \rangle \supset 2\langle x u|t y\rangle - \langle x u|y t\rangle,
+\]
+are directly available. This stepwise transformation is essential for efficient implementations of direct CIS or FCSCF procedures where only a subset of configurations is treated.
+
+\end{document}
