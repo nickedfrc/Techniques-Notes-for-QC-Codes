@@ -1,0 +1,219 @@
+# FCLIB: Matrix Function Library — Algorithm Principles
+
+## Overview
+
+Module **FCLIB** provides three core matrix function routines for
+FCSCF (Fully-Configured Self-Consistent Field) quantum chemistry
+calculations:
+
+1. **LOGEM**  — Principal matrix logarithm $\ln(X)$ for a real square matrix
+2. **EXPEMS** — Matrix exponential $\exp(K)$ for a real skew-symmetric matrix
+3. **EXPEM**  — Matrix exponential $\exp(X)$ for a general real square matrix
+
+All three routines follow the same high-level paradigm: *spectral
+decomposition followed by scalar function evaluation on the
+eigenvalues, then reconstruction*. This document describes the
+mathematical algorithms behind each routine.
+
+---
+
+## 1. LOGEM — Principal Matrix Logarithm
+
+### 1.1 Problem Statement
+
+Given a real $N \times N$ matrix $X$, compute the principal matrix
+logarithm $L = \ln(X)$, satisfying $\exp(L) = X$.
+
+### 1.2 Algorithm
+
+**Step 1 — Real eigenvalue decomposition**
+
+Compute the eigenvalue decomposition via LAPACK's `DGEEV`:
+
+$$
+X \cdot V = V \cdot \Lambda
+$$
+
+where:
+- $\Lambda = \operatorname{diag}(\lambda_1, \dots, \lambda_N)$
+  (eigenvalues, may be complex, appear as conjugate pairs)
+- $V$ is the real right eigenvector matrix $V_R$
+
+**Step 2 — Invert the eigenvector matrix**
+
+Solve $V \cdot V^{-1} = I$ via LAPACK's `DGESV` to obtain $V^{-1}$.
+
+**Step 3 — Build the block-diagonal matrix $D = \ln(\Lambda)$**
+
+For each eigenvalue $\lambda$:
+
+- **Real eigenvalue** ($\operatorname{Im}(\lambda) = 0$):  
+  If $\lambda > 0$, set $D_{kk} = \ln(\lambda)$.  
+  If $\lambda \le 0$, the principal logarithm is undefined (branch cut
+  along the negative real axis); an error is raised.
+
+- **Complex conjugate pair** ($\lambda = a \pm ib = re^{\pm i\theta}$):  
+  Embed the $2 \times 2$ real block:
+  
+  $$
+  D_{k:k+1,\,k:k+1} =
+    \begin{bmatrix}
+    \ln r & -\theta \\
+    \theta & \ln r
+    \end{bmatrix}
+  $$
+
+  This exploits the isomorphism $\mathbb{C} \cong
+  \bigl\{ \begin{bmatrix}a & -b \\ b & a\end{bmatrix} \bigr\}$.
+
+**Step 4 — Reconstruction**
+
+$$
+\ln X = V \cdot D \cdot V^{-1}
+$$
+
+via two `DGEMM` calls. The result is guaranteed real.
+
+### 1.3 Applicability
+
+Works for any diagonalizable real matrix whose eigenvalues avoid the
+non-positive real axis. For symmetric positive-definite matrices
+(common in quantum chemistry), all eigenvalues are real and positive,
+so only the real branch is activated.
+
+### References
+
+- Higham, N. J. *Functions of Matrices: Theory and Computation*,
+  SIAM, 2008, Ch. 11.
+
+---
+
+## 2. EXPEMS — Skew-Symmetric Matrix Exponential
+
+### 2.1 Problem Statement
+
+Given a real skew-symmetric matrix $K$ ($K^T = -K$), compute the
+matrix exponential $\exp(K)$, which is guaranteed to be a special
+orthogonal matrix (rotation matrix).
+
+### 2.2 Algorithm
+
+**Step 1 — Real eigenvalue decomposition**
+
+Same as LOGEM: `DGEEV` on $K$. For a skew-symmetric matrix, all
+eigenvalues are purely imaginary (or zero).
+
+**Step 2 — Invert the eigenvector matrix**
+
+Same as LOGEM: solve $V \cdot V^{-1} = I$ via `DGESV`.
+
+**Step 3 — Build $D = \exp(\Lambda)$ for skew-symmetric case**
+
+For each eigenvalue:
+
+- **Zero eigenvalue** ($\lambda = 0$):  
+  $D_{kk} = \exp(0) = 1$.
+
+- **Complex conjugate pair** ($\lambda = \pm i\omega$):  
+  $\exp(\pm i\omega) = \cos\omega \pm i\sin\omega$.  
+  The $2 \times 2$ real block is a pure rotation matrix:
+  
+  $$
+  D_{k:k+1,\,k:k+1} =
+    \begin{bmatrix}
+    \cos\omega & \sin\omega \\
+    -\sin\omega & \cos\omega
+    \end{bmatrix}
+  $$
+
+  Because the real part $a = 0$, $\exp(a) = 1$ and the block reduces
+  to a rotation — no $\exp(\cdot)$ calls are needed.
+
+**Step 4 — Reconstruction**
+
+$$
+\exp(K) = V \cdot D \cdot V^{-1}
+$$
+
+via two `DGEMM` calls.
+
+### 2.3 Validation
+
+Before building $D$, the routine checks:
+- No real eigenvalue with magnitude $> 10^{-8}$ (confirming $K$ is
+  skew-symmetric)
+- No complex eigenvalue with non-zero real part
+
+### References
+
+- Moler, C. B. & Van Loan, C. F. *Nineteen Dubious Ways to Compute
+  the Exponential of a Matrix*, SIAM Review, 1978.
+
+---
+
+## 3. EXPEM — General Matrix Exponential
+
+### 3.1 Problem Statement
+
+Given a real $N \times N$ matrix $X$, compute the matrix exponential
+$\exp(X)$, defined by the convergent power series:
+
+$$
+\exp(X) = \sum_{k=0}^{\infty} \frac{1}{k!} X^k
+$$
+
+### 3.2 Algorithm
+
+**Step 1 — Real eigenvalue decomposition**
+
+Same as LOGEM: `DGEEV` on $X$.
+
+**Step 2 — Invert the eigenvector matrix**
+
+Same as LOGEM: solve $V \cdot V^{-1} = I$ via `DGESV`.
+
+**Step 3 — Build $D = \exp(\Lambda)$**
+
+For each eigenvalue $\lambda = a + ib$ (where $b = 0$ for real
+eigenvalues):
+
+- **Real eigenvalue** ($b = 0$):  
+  $D_{kk} = \exp(a)$.
+
+- **Complex conjugate pair** ($\lambda = a \pm ib$):  
+  $\exp(a + ib) = e^a(\cos b + i\sin b)$.  
+  The $2 \times 2$ real block is:
+  
+  $$
+  D_{k:k+1,\,k:k+1} = e^a
+    \begin{bmatrix}
+    \cos b & -\sin b \\
+    \sin b & \cos b
+    \end{bmatrix}
+  $$
+
+**Step 4 — Reconstruction**
+
+$$
+\exp(X) = V \cdot D \cdot V^{-1}
+$$
+
+via two `DGEMM` calls.
+
+### 3.3 Remarks
+
+Unlike the logarithm, the matrix exponential is defined for all real
+eigenvalues (no branch-cut restriction). For symmetric matrices, $V$
+is orthogonal, so $V^{-1} = V^T$, reducing the reconstruction to a
+similarity transform.
+
+### References
+
+- Higham, N. J. *Functions of Matrices*, SIAM, 2008, Ch. 10.
+- Moler & Van Loan, *Nineteen Dubious Ways*, SIAM Review, 1978.
+
+---
+
+## 4. Unified Paradigm
+
+All three routines share the same four-step pipeline:
